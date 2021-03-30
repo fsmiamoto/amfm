@@ -33,7 +33,6 @@ var modulated = dsb.Modulate(carrier, message)
 var spectrum = fft.ForSignal(modulated)
 
 func playFreqDomainChart(ctx context.Context, lc *linechart.LineChart, delay time.Duration) {
-
 	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
 
@@ -46,7 +45,7 @@ func playFreqDomainChart(ctx context.Context, lc *linechart.LineChart, delay tim
 					0: "zero",
 				}),
 			); err != nil {
-				panic(err)
+				exitWithErr(err)
 			}
 		case <-ctx.Done():
 			return
@@ -57,6 +56,7 @@ func playFreqDomainChart(ctx context.Context, lc *linechart.LineChart, delay tim
 func playTimeDomainChart(ctx context.Context, lc *linechart.LineChart, delay time.Duration) {
 	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
+
 	for i := 0; ; {
 		select {
 		case <-ticker.C:
@@ -68,13 +68,13 @@ func playTimeDomainChart(ctx context.Context, lc *linechart.LineChart, delay tim
 					0: "zero",
 				}),
 			); err != nil {
-				panic(err)
+				exitWithErr(err)
 			}
 			rotatedMsg := append(message[i:], message[:i]...)
 			if err := lc.Series("message", rotatedMsg,
 				linechart.SeriesCellOpts(cell.FgColor(cell.ColorWhite)),
 			); err != nil {
-				panic(err)
+				exitWithErr(err)
 			}
 		case <-ctx.Done():
 			return
@@ -85,7 +85,7 @@ func playTimeDomainChart(ctx context.Context, lc *linechart.LineChart, delay tim
 func main() {
 	t, err := termbox.New()
 	if err != nil {
-		errorAndExit(err)
+		exitWithErr(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -102,7 +102,7 @@ func main() {
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorCyan)),
 	)
 	if err != nil {
-		panic(err)
+		exitWithErr(err)
 	}
 	go playTimeDomainChart(ctx, timeDomain, redrawInterval/3)
 
@@ -112,7 +112,7 @@ func main() {
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorCyan)),
 	)
 	if err != nil {
-		panic(err)
+		exitWithErr(err)
 	}
 	go playFreqDomainChart(ctx, freqDomain, redrawInterval/3)
 
@@ -135,11 +135,11 @@ func main() {
 	)
 
 	if err := termdash.Run(ctx, t, c, termdash.KeyboardSubscriber(quitter), termdash.RedrawInterval(redrawInterval)); err != nil {
-		errorAndExit(err)
+		exitWithErr(err)
 	}
 }
 
-func errorAndExit(err error) {
+func exitWithErr(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
 }
