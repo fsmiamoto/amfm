@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fsmiamoto/amfm/fft"
 	"github.com/fsmiamoto/amfm/modulator"
 	"github.com/fsmiamoto/amfm/signal"
 	"github.com/mum4k/termdash"
@@ -21,29 +22,25 @@ import (
 const title = "AM FM"
 const redrawInterval = 250 * time.Millisecond
 
-func errorAndExit(err error) {
-	fmt.Fprintln(os.Stderr, err)
-	os.Exit(1)
-}
-
 const numOfSamples = 10000
 
-// playLineChart continuously adds values to the LineChart, once every delay.
-// Exits when the context expires.
-func playLineChart(ctx context.Context, lc *linechart.LineChart, delay time.Duration) {
-	am := modulator.AM{Sensitivity: 2}
-	carrier := signal.Cos(100, numOfSamples).Scale(3)
-	message := signal.Sin(10, numOfSamples).Scale(1)
-	modulated, _ := am.Modulate(carrier, message)
+//TODO: Make these adjustable through the UI
+var carrier = signal.Cos(100, numOfSamples).Scale(3)
+var message = signal.Sin(10, numOfSamples).Scale(1)
+
+var dsb = modulator.NewDSB(1.5)
+var modulated = dsb.Modulate(carrier, message)
+var spectrum = fft.ForSignal(modulated)
+
+func playFreqDomainChart(ctx context.Context, lc *linechart.LineChart, delay time.Duration) {
 
 	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
-	for i := 0; ; {
+
+	for {
 		select {
 		case <-ticker.C:
-			i = (i + 1) % len(modulated)
-			rotated := append(modulated[i:], modulated[:i]...)
-			if err := lc.Series("modulated", rotated,
+			if err := lc.Series("spectrum", spectrum,
 				linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(33))),
 				linechart.SeriesXLabels(map[int]string{
 					0: "zero",
@@ -51,8 +48,30 @@ func playLineChart(ctx context.Context, lc *linechart.LineChart, delay time.Dura
 			); err != nil {
 				panic(err)
 			}
-			rotated2 := append(message[i:], message[:i]...)
-			if err := lc.Series("message", rotated2,
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func playTimeDomainChart(ctx context.Context, lc *linechart.LineChart, delay time.Duration) {
+	ticker := time.NewTicker(delay)
+	defer ticker.Stop()
+	for i := 0; ; {
+		select {
+		case <-ticker.C:
+			i = (i + 1) % len(modulated)
+			rotatedCarrier := append(modulated[i:], modulated[:i]...)
+			if err := lc.Series("modulated", rotatedCarrier,
+				linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(33))),
+				linechart.SeriesXLabels(map[int]string{
+					0: "zero",
+				}),
+			); err != nil {
+				panic(err)
+			}
+			rotatedMsg := append(message[i:], message[:i]...)
+			if err := lc.Series("message", rotatedMsg,
 				linechart.SeriesCellOpts(cell.FgColor(cell.ColorWhite)),
 			); err != nil {
 				panic(err)
@@ -77,7 +96,7 @@ func main() {
 		}
 	}
 
-	lc, err := linechart.New(
+	timeDomain, err := linechart.New(
 		linechart.AxesCellOpts(cell.FgColor(cell.ColorRed)),
 		linechart.YLabelCellOpts(cell.FgColor(cell.ColorGreen)),
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorCyan)),
@@ -85,16 +104,42 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	go playLineChart(ctx, lc, redrawInterval/3)
+	go playTimeDomainChart(ctx, timeDomain, redrawInterval/3)
+
+	freqDomain, err := linechart.New(
+		linechart.AxesCellOpts(cell.FgColor(cell.ColorRed)),
+		linechart.YLabelCellOpts(cell.FgColor(cell.ColorGreen)),
+		linechart.XLabelCellOpts(cell.FgColor(cell.ColorCyan)),
+	)
+	if err != nil {
+		panic(err)
+	}
+	go playFreqDomainChart(ctx, freqDomain, redrawInterval/3)
 
 	c, err := container.New(
 		t,
 		container.Border(linestyle.Light),
 		container.BorderTitle(title),
-		container.PlaceWidget(lc),
+		container.SplitHorizontal(
+			container.Top(
+				container.Border(linestyle.Double),
+				container.BorderTitle("Time domain"),
+				container.PlaceWidget(timeDomain),
+			),
+			container.Bottom(
+				container.Border(linestyle.Double),
+				container.BorderTitle("Frequency domain"),
+				container.PlaceWidget(freqDomain),
+			),
+		),
 	)
 
 	if err := termdash.Run(ctx, t, c, termdash.KeyboardSubscriber(quitter), termdash.RedrawInterval(redrawInterval)); err != nil {
 		errorAndExit(err)
 	}
+}
+
+func errorAndExit(err error) {
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
 }
