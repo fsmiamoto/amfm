@@ -1,6 +1,6 @@
 BIN=amfm
 
-$(BIN):
+$(BIN): *.go
 	go build -o $(BIN)
 
 clean:

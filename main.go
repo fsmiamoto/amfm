@@ -20,12 +20,12 @@ import (
 )
 
 const title = "AM FM"
-const redrawInterval = 250 * time.Millisecond
+const redrawInterval = 300 * time.Millisecond
 
 const numOfSamples = 10000
 
 //TODO: Make these adjustable through the UI
-var carrier = signal.Cos(100, numOfSamples).Scale(3)
+var carrier = signal.Cos(200, numOfSamples).Scale(3)
 var message = signal.Sin(10, numOfSamples).Scale(1)
 
 var dsb = modulator.NewDSB(1.5)
@@ -36,14 +36,15 @@ func playFreqDomainChart(ctx context.Context, lc *linechart.LineChart, delay tim
 	ticker := time.NewTicker(delay)
 	defer ticker.Stop()
 
+	// Let's show only the upper part of the spectrum
+	middle := len(spectrum) / 2
+
+	//TODO: Convert indices from the spectrum to frequency values
 	for {
 		select {
 		case <-ticker.C:
-			if err := lc.Series("spectrum", spectrum,
+			if err := lc.Series("spectrum", spectrum[middle:],
 				linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(33))),
-				linechart.SeriesXLabels(map[int]string{
-					0: "zero",
-				}),
 			); err != nil {
 				exitWithErr(err)
 			}
@@ -64,9 +65,6 @@ func playTimeDomainChart(ctx context.Context, lc *linechart.LineChart, delay tim
 			rotatedCarrier := append(modulated[i:], modulated[:i]...)
 			if err := lc.Series("modulated", rotatedCarrier,
 				linechart.SeriesCellOpts(cell.FgColor(cell.ColorNumber(33))),
-				linechart.SeriesXLabels(map[int]string{
-					0: "zero",
-				}),
 			); err != nil {
 				exitWithErr(err)
 			}
@@ -140,6 +138,6 @@ func main() {
 }
 
 func exitWithErr(err error) {
-	fmt.Fprintln(os.Stderr, err)
+	fmt.Fprintln(os.Stderr, "error: ", err)
 	os.Exit(1)
 }
